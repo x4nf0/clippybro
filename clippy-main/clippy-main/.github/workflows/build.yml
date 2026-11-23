@@ -1,0 +1,90 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag del release (ej. v0.3.0)"
+        required: false
+      publish:
+        description: "Publicar el release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  # PRs y main: verificar que compila (con y sin las pruebas) y que clippy no da avisos.
+  # En debug y sin LTO: varias veces más rápido que compilar el exe final.
+  # Se llama "build" porque la protección de main pide ese check.
+  build:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # La clave incluye este archivo: si cambian los comandos, se arma una caché nueva.
+      # Sin eso, una caché vieja con la misma clave se restaura entera pero no sirve
+      # (y como coincide, nunca se vuelve a guardar).
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('.github/workflows/build.yml') }}
+
+      - name: Clippy
+        run: cargo clippy --locked -- -D warnings
+
+      - name: Clippy con devtools
+        run: cargo clippy --locked --features devtools -- -D warnings
+
+  # Publicar a mano (Actions → Build → Run workflow): el exe final, una sola vez.
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    # Escribir solo para crear el release.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ hashFiles('.github/workflows/build.yml') }}
+
+      - name: Compilar
+        run: cargo build --release --locked
+
+      - name: Preparar Clippy.exe
+        shell: bash
+        run: |
+          cp target/release/clippy.exe Clippy.exe
+          echo "Tamaño: $(stat -c %s Clippy.exe) bytes"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Clippy.exe
+          path: Clippy.exe
+
+      - name: Publicar el release
+        if: inputs.publish && inputs.tag != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" Clippy.exe --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            # Como borrador: la app muestra el texto del release como novedades, así que nadie tiene que
+            # verlo hasta que tenga texto (se publica a mano después de escribirlo).
+            gh release create "$TAG" Clippy.exe --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Clippy ${TAG#v}" --notes "" --draft
+          fi

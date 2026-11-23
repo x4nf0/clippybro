@@ -1,0 +1,74 @@
+[package]
+name = "clippy"
+version = "0.4.4"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Clips instantáneos ultralivianos para Windows (captura y codificación 100% en GPU)"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+eframe = { version = "0.29", default-features = false, features = ["glow", "default_fonts"] }
+rfd = { version = "0.15", default-features = false }
+
+windows-core = "0.58"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+    "implement",
+    "Win32_Networking_WinHttp",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Devices_Display",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Security",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_MediaFoundation",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_System_Threading",
+    "Win32_System_Performance",
+    "Win32_System_SystemInformation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_Storage_FileSystem",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+]
+
+[build-dependencies]
+png = "0.17"
+embed-resource = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# Para probar mientras se desarrolla (`--test`, abrir ventanas): optimizado como el exe final
+# pero sin LTO y con compilación incremental, así un cambio compila en segundos y no en un minuto.
+# Queda en target/fast/. El tamaño se mide siempre con --release.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
+[features]
+# Modos de prueba sin ventana (--test, --test-export, ...). No van en el exe publicado.
+devtools = []
